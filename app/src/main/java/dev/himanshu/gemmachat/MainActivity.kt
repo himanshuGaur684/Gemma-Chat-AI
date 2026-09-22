@@ -5,6 +5,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,13 +21,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -30,13 +42,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import dev.himanshu.gemmachat.ui.theme.GemmaChatTheme
 
@@ -50,7 +65,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             GemmaChatTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    ChatScreen(viewModel)
+                    MainChatUi(
+                        modifier = Modifier
+                            .padding(innerPadding)
+                            .fillMaxSize(),
+                        viewModel = viewModel
+                    )
                 }
             }
         }
@@ -58,108 +78,159 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun ChatScreen(vm: ChatViewModel) {
-    val messages by vm.messages.collectAsState()
-    val isReady by vm.isReady.collectAsState()
-    val status by vm.status.collectAsState()
-    val isGenerating by vm.isGenerating.collectAsState()
+fun MainChatUi(modifier: Modifier = Modifier, viewModel: ChatViewModel) {
+
+    val messages by viewModel.messages.collectAsState()
+    val isGenerating by viewModel.isGenerating.collectAsState()
+    val isReady by viewModel.isReady.collectAsState()
+    val status by viewModel.status.collectAsState()
 
     var input by remember { mutableStateOf("") }
+
     val listState = rememberLazyListState()
 
-    // Auto-scroll to the newest message as it grows.
+    val isAtBottom by remember {
+        derivedStateOf {
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+            last == null || last.index >= messages.lastIndex
+        }
+    }
+
     LaunchedEffect(messages.size, messages.lastOrNull()?.text) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
+        if (messages.isNotEmpty() && isAtBottom) {
+            listState.scrollToItem(messages.lastIndex, Int.MAX_VALUE)
+        }
     }
 
     Column(
-        Modifier
+        modifier = modifier
             .fillMaxSize()
+            .imePadding()
             .padding(12.dp)
     ) {
 
         Text(
-            "Gemma Chat (offline)",
+            "Gemma Chat (Offline) ",
             style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 8.dp)
+            modifier = Modifier.padding(8.dp)
         )
 
-        // ----- Loading state -----
-        if (!isReady) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+        AnimatedVisibility(
+            isReady.not(),
+            enter = fadeIn(tween(700)),
+            exit = fadeOut(tween(700))
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     CircularProgressIndicator()
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
                     Text(status)
                 }
             }
-            return@Column
+            return@AnimatedVisibility
         }
 
-        // ----- Message list -----
         LazyColumn(
-            state = listState,
             modifier = Modifier.weight(1f),
+            state = listState,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(messages) { msg -> MessageBubble(msg) }
+            items(messages, key = { it.id }) {
+                MessageBubble(
+                    modifier = Modifier.animateItem(),
+                    message = it
+                )
+                if (messages.size - 1 == messages.lastIndex) Spacer(Modifier.height(8.dp))
+            }
         }
 
-        if (isGenerating) {
+        AnimatedVisibility(
+            isGenerating,
+            enter = slideInVertically(tween(700)) { it } + fadeIn(tween(700)),
+            exit = slideOutVertically(tween(700)) { it } + fadeOut(tween(700))
+        ) {
             Text(
-                "Gemma is typing…",
+                "Gemma is generating response...",
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.padding(vertical = 4.dp)
             )
         }
 
-        // ----- Input row -----
-        Row(verticalAlignment = Alignment.CenterVertically) {
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             OutlinedTextField(
                 value = input,
                 onValueChange = { input = it },
+                placeholder = { Text("Ask something...") },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Ask something…") },
-                enabled = !isGenerating
-            )
-            Spacer(Modifier.width(8.dp))
-            Button(
-                onClick = {
+                enabled = !isGenerating,
+                shape = CircleShape,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = {
                     if (input.isNotBlank()) {
-                        vm.send(input); input = ""
+                        viewModel.send(input)
+                        input = ""
                     }
-                },
-                enabled = !isGenerating && input.isNotBlank()
-            ) {
+                })
+            )
+
+            Spacer(Modifier.width(8.dp))
+
+            Button(onClick = {
+                if (input.isNotBlank()) {
+                    viewModel.send(input)
+                    input = ""
+                }
+            }, enabled = isGenerating.not() && input.isNotBlank()) {
                 Text("Send")
             }
+
         }
     }
 }
 
 @Composable
-private fun MessageBubble(msg: ChatMessage) {
-    val bubbleColor =
-        if (msg.fromUser) MaterialTheme.colorScheme.primaryContainer
-        else MaterialTheme.colorScheme.surfaceVariant
+fun MessageBubble(modifier: Modifier = Modifier, message: ChatMessage) {
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (msg.fromUser) Arrangement.End else Arrangement.Start
+    val bubbleColor =
+        if (message.fromUser) MaterialTheme.colorScheme.primaryContainer else Color.Green.copy(alpha = 0.5f)
+
+
+    val transitionState =
+        remember { MutableTransitionState(initialState = false).apply { targetState = true } }
+
+    AnimatedVisibility(
+        visibleState = transitionState,
+        modifier = modifier,
+        enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { fullHeight -> fullHeight / 2 }
     ) {
-        Surface(
-            color = bubbleColor,
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.widthIn(max = 300.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = if (message.fromUser) Arrangement.End else Arrangement.Start
         ) {
-            Column(Modifier.padding(10.dp)) {
-                Text(
-                    if (msg.fromUser) "You" else "Gemma",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(msg.text.ifEmpty { "…" })
+            Surface(
+                modifier = Modifier
+                    .widthIn(max = 300.dp)
+                    .animateContentSize(),
+                color = bubbleColor,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(8.dp)) {
+                    Text(
+                        if (message.fromUser) "You" else "Gemma",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(message.text.ifEmpty { "_" })
+                }
             }
         }
     }

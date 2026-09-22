@@ -7,7 +7,6 @@ import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
-import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -17,7 +16,6 @@ class GemmaEngine(
     private val engine: Engine,
     private val conversation: Conversation
 ) {
-
 
     fun reply(prompt: String): Flow<String> {
         return conversation.sendMessageAsync(prompt).map { it.toString() }
@@ -29,7 +27,6 @@ class GemmaEngine(
     }
 
     companion object {
-
         suspend fun create(context: Context): GemmaEngine = withContext(Dispatchers.IO) {
 
             val config = EngineConfig(
@@ -45,14 +42,17 @@ class GemmaEngine(
 
             val conversation = engine.createConversation(
                 ConversationConfig(
-                    systemInstruction = Contents.of("You are a helpful assistant"),
-                    samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.8)
+                    systemInstruction = Contents.of("You are a helpful assistant")
                 )
             )
-            GemmaEngine(engine = engine, conversation = conversation)
+
+            GemmaEngine(
+                engine = engine,
+                conversation = conversation
+            )
+
+
         }
-
-
     }
 
 
