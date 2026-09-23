@@ -145,8 +145,6 @@ fun MainChatUi(modifier: Modifier = Modifier, viewModel: ChatViewModel) {
                 MessageBubble(
                     modifier = Modifier.animateItem(),
                     message = it,
-                    // Only the last Gemma bubble, while a response is streaming.
-                    isStreaming = isGenerating && !it.fromUser && it.id == messages.lastOrNull()?.id
                 )
                 if (messages.size - 1 == messages.lastIndex) Spacer(Modifier.height(8.dp))
             }
@@ -204,7 +202,6 @@ fun MainChatUi(modifier: Modifier = Modifier, viewModel: ChatViewModel) {
 fun MessageBubble(
     modifier: Modifier = Modifier,
     message: ChatMessage,
-    isStreaming: Boolean = false
 ) {
 
     val bubbleColor =
