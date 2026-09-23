@@ -51,4 +51,5 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     implementation(libs.litertlm.android)
+    implementation(libs.markdown.renderer.m3)
 }

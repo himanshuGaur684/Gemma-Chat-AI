@@ -53,6 +53,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.mikepenz.markdown.m3.Markdown
+import com.mikepenz.markdown.model.rememberMarkdownState
 import dev.himanshu.gemmachat.ui.theme.GemmaChatTheme
 
 class MainActivity : ComponentActivity() {
@@ -142,7 +144,9 @@ fun MainChatUi(modifier: Modifier = Modifier, viewModel: ChatViewModel) {
             items(messages, key = { it.id }) {
                 MessageBubble(
                     modifier = Modifier.animateItem(),
-                    message = it
+                    message = it,
+                    // Only the last Gemma bubble, while a response is streaming.
+                    isStreaming = isGenerating && !it.fromUser && it.id == messages.lastOrNull()?.id
                 )
                 if (messages.size - 1 == messages.lastIndex) Spacer(Modifier.height(8.dp))
             }
@@ -197,7 +201,11 @@ fun MainChatUi(modifier: Modifier = Modifier, viewModel: ChatViewModel) {
 }
 
 @Composable
-fun MessageBubble(modifier: Modifier = Modifier, message: ChatMessage) {
+fun MessageBubble(
+    modifier: Modifier = Modifier,
+    message: ChatMessage,
+    isStreaming: Boolean = false
+) {
 
     val bubbleColor =
         if (message.fromUser) MaterialTheme.colorScheme.primaryContainer else Color.Green.copy(alpha = 0.5f)
@@ -229,9 +237,18 @@ fun MessageBubble(modifier: Modifier = Modifier, message: ChatMessage) {
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(8.dp))
-                    Text(message.text.ifEmpty { "_" })
+                    if (message.fromUser) {
+                        Text(message.text.ifEmpty { "_" })
+                    } else {
+                        val mdState = rememberMarkdownState(
+                            content = message.text.ifEmpty { "_" },
+                            retainState = true
+                        )
+                        Markdown(mdState)
+                    }
                 }
             }
         }
     }
 }
+
