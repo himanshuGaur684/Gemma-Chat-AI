@@ -1,9 +1,14 @@
 package dev.himanshu.gemmachat
 
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -13,6 +18,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,7 +55,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -86,6 +97,10 @@ fun MainChatUi(modifier: Modifier = Modifier, viewModel: ChatViewModel) {
     val status by viewModel.status.collectAsState()
 
     var input by remember { mutableStateOf("") }
+
+     val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri -> uri?.let { viewModel.sendImage(it, input) } }
 
     val listState = rememberLazyListState()
 
@@ -165,6 +180,8 @@ fun MainChatUi(modifier: Modifier = Modifier, viewModel: ChatViewModel) {
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+
+
             OutlinedTextField(
                 value = input,
                 onValueChange = { input = it },
@@ -178,7 +195,18 @@ fun MainChatUi(modifier: Modifier = Modifier, viewModel: ChatViewModel) {
                         viewModel.send(input)
                         input = ""
                     }
-                })
+                }),
+                trailingIcon = {
+                    Button(
+                        modifier=Modifier.padding(end = 8.dp),
+                        onClick = {
+                            imagePicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                        enabled = !isGenerating
+                    ) { Text("📷") }
+                }
             )
 
             Spacer(Modifier.width(8.dp))
@@ -199,8 +227,8 @@ fun MainChatUi(modifier: Modifier = Modifier, viewModel: ChatViewModel) {
 @Composable
 fun MessageBubble(modifier: Modifier = Modifier, message: ChatMessage) {
 
-    val bubbleColor =
-        if (message.fromUser) MaterialTheme.colorScheme.primaryContainer else Color.Green.copy(alpha = 0.5f)
+    val bubbleColor = if (message.fromUser) MaterialTheme.colorScheme.primaryContainer
+    else Color.Green.copy(alpha = 0.5f)
 
 
     val transitionState =
@@ -229,9 +257,37 @@ fun MessageBubble(modifier: Modifier = Modifier, message: ChatMessage) {
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(8.dp))
+
+                    message.imageUri?.let { uri ->
+                        rememberBitmap(uri)?.let { bitmap ->
+                            Image(
+                                bitmap = bitmap,
+                                contentDescription = "Sent image",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(180.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
+
                     Text(message.text.ifEmpty { "_" })
                 }
             }
         }
+    }
+}
+
+@Composable
+fun rememberBitmap(uri: Uri): ImageBitmap? {
+    val context = LocalContext.current
+    return remember(uri) {
+        runCatching {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream)?.asImageBitmap()
+            }
+        }.getOrNull()
     }
 }

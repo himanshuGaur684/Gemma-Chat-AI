@@ -1,15 +1,19 @@
 package dev.himanshu.gemmachat
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class ChatMessage(
     val text: String,
     val fromUser: Boolean,
+    val imageUri: Uri? = null,
     val id: String = java.util.UUID.randomUUID().toString()
 )
 
@@ -33,9 +37,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             try {
-                _status.value = "Preparing model..."
-                ModelDownloader.ensureModel(getApplication())
-
                 _status.value = "Loading model..."
                 gemmaEngine = GemmaEngine.create(getApplication())
 
@@ -79,7 +80,45 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 _isGenerating.value = false
             }
         }
+    }
 
+    fun sendImage(uri: Uri, prompt: String = "Describe this image in detail.") {
+        val engine = gemmaEngine ?: return
+        if (_isGenerating.value) return
+
+        _messages.value += ChatMessage(prompt, true, imageUri = uri)
+        _messages.value += ChatMessage("", false)
+
+
+        viewModelScope.launch {
+            // Read the picked image into bytes (off the main thread).
+            val bytes = withContext(Dispatchers.IO) {
+                getApplication<Application>().contentResolver
+                    .openInputStream(uri)?.use { it.readBytes() }
+            }
+            if (bytes == null) {
+                _messages.value += ChatMessage("⚠️ Could not read the image", false)
+                return@launch
+            }
+
+            _isGenerating.value = true
+
+            try {
+                engine.replyWithImage(bytes, prompt).collect { chunk ->
+                    val current = _messages.value.toMutableList()
+                    val last = current.last()
+                    current[current.size - 1] = last.copy(text = last.text.plus(chunk))
+                    _messages.value = current
+                }
+            } catch (e: Exception) {
+                val current = _messages.value.toMutableList()
+                val last = current.last()
+                current[current.size - 1] = last.copy(text = "Something went wrong ${e.message}")
+                _messages.value = current
+            } finally {
+                _isGenerating.value = false
+            }
+        }
     }
 
     override fun onCleared() {

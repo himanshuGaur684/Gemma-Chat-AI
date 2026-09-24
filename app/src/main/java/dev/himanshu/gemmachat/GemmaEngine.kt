@@ -2,6 +2,7 @@ package dev.himanshu.gemmachat
 
 import android.content.Context
 import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
@@ -17,8 +18,19 @@ class GemmaEngine(
     private val conversation: Conversation
 ) {
 
+    // Model URL: https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/tree/main
+
     fun reply(prompt: String): Flow<String> {
         return conversation.sendMessageAsync(prompt).map { it.toString() }
+    }
+
+    fun replyWithImage(imageBytes: ByteArray, prompt: String): Flow<String> {
+        return conversation.sendMessageAsync(
+            Contents.of(
+                Content.ImageBytes(imageBytes),
+                Content.Text(prompt)
+            )
+        ).map { it.toString() }
     }
 
     fun close() {
@@ -30,8 +42,9 @@ class GemmaEngine(
         suspend fun create(context: Context): GemmaEngine = withContext(Dispatchers.IO) {
 
             val config = EngineConfig(
-                modelPath = ModelDownloader.modelFile(context).absolutePath,
-                backend = Backend.CPU(),
+                modelPath = "/data/local/tmp/llm/model.litertlm",
+                backend = Backend.GPU(),
+                visionBackend = Backend.GPU(),   // enables image understanding
                 cacheDir = context.cacheDir.path
             )
 
