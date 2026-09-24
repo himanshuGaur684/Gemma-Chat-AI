@@ -31,10 +31,18 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val _status = MutableStateFlow("Preparing model...")
     val status = _status.asStateFlow()
 
+    private val _isListening = MutableStateFlow(false)
+    val isListening = _isListening.asStateFlow()
+
 
     private var gemmaEngine: GemmaEngine? = null
+    private val voice = VoiceController(app)
 
     init {
+        voice.onListeningChange = { _isListening.value = it }
+        voice.onResult = { spokenText -> send(spokenText, speak = true) }
+        voice.onError = { msg -> _status.value = msg }
+
         viewModelScope.launch {
             try {
                 _status.value = "Loading model..."
@@ -49,8 +57,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun startListening() {
+        if (_isGenerating.value) return
+        voice.startListening()
+    }
 
-    fun send(userText: String) {
+    fun stopListening() = voice.stopListening()
+
+
+    fun send(userText: String, speak: Boolean = false) {
 
         val engine = gemmaEngine ?: return
         if (_isGenerating.value) return
@@ -78,6 +93,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 _messages.value = current
             } finally {
                 _isGenerating.value = false
+                // Speak Jarvis's reply aloud when the request came from voice.
+                if (speak) voice.speak(_messages.value.lastOrNull()?.text.orEmpty())
             }
         }
     }
@@ -123,6 +140,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         gemmaEngine?.close()
+        voice.shutdown()
     }
 
 

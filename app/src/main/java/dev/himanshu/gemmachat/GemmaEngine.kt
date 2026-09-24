@@ -55,7 +55,11 @@ class GemmaEngine(
 
             val conversation = engine.createConversation(
                 ConversationConfig(
-                    systemInstruction = Contents.of("You are a helpful assistant")
+                    systemInstruction = Contents.of(
+                        "You are Jarvis, a witty, concise AI assistant running fully offline on the user's phone. " +
+                            "Keep replies short and conversational since they may be read aloud. " +
+                            "Address the user politely."
+                    )
                 )
             )
 

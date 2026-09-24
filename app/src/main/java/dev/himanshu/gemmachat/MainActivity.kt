@@ -1,5 +1,7 @@
 package dev.himanshu.gemmachat
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
@@ -19,6 +21,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -59,11 +63,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import dev.himanshu.gemmachat.ui.theme.GemmaChatTheme
 
 class MainActivity : ComponentActivity() {
@@ -97,10 +103,16 @@ fun MainChatUi(modifier: Modifier = Modifier, viewModel: ChatViewModel) {
     val status by viewModel.status.collectAsState()
 
     var input by remember { mutableStateOf("") }
+    val isListening by viewModel.isListening.collectAsState()
+    val context = LocalContext.current
 
      val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { viewModel.sendImage(it, input) } }
+
+    val micPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* granted handled on next press-and-hold */ }
 
     val listState = rememberLazyListState()
 
@@ -125,7 +137,7 @@ fun MainChatUi(modifier: Modifier = Modifier, viewModel: ChatViewModel) {
     ) {
 
         Text(
-            "Gemma Chat (Offline) ",
+            if (isListening) "Jarvis is listening… 🎙️" else "Jarvis (Offline)",
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(8.dp)
         )
@@ -181,6 +193,37 @@ fun MainChatUi(modifier: Modifier = Modifier, viewModel: ChatViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
 
+            // Push-to-talk: listens only while the button is held down.
+            Surface(
+                shape = CircleShape,
+                color = if (isListening) MaterialTheme.colorScheme.errorContainer
+                else MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .size(48.dp)
+                    .pointerInput(isGenerating) {
+                        detectTapGestures(
+                            onPress = {
+                                if (isGenerating) return@detectTapGestures
+                                val granted = ContextCompat.checkSelfPermission(
+                                    context, Manifest.permission.RECORD_AUDIO
+                                ) == PackageManager.PERMISSION_GRANTED
+                                if (!granted) {
+                                    micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                    return@detectTapGestures
+                                }
+                                viewModel.startListening()   // hold down → start
+                                tryAwaitRelease()            // wait until finger lifts
+                                viewModel.stopListening()    // release → stop & process
+                            }
+                        )
+                    }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(if (isListening) "🎙️" else "🎤")
+                }
+            }
+
+            Spacer(Modifier.width(8.dp))
 
             OutlinedTextField(
                 value = input,
@@ -252,7 +295,7 @@ fun MessageBubble(modifier: Modifier = Modifier, message: ChatMessage) {
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {
                     Text(
-                        if (message.fromUser) "You" else "Gemma",
+                        if (message.fromUser) "You" else "Jarvis",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold
                     )
